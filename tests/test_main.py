@@ -187,3 +187,16 @@ def test_auto_update_scheduler():
     assert sched.tick([])["ran"] is False
     sched.clock.advance(120)
     assert sched.tick([])["ran"] is True
+
+def test_auth_names_all_providers():
+    kinds = {"api_key", "token", "oauth", "basic", "keys", "service_account", "account", "none"}
+    assert len(m.PROVIDERS) == 157
+    for key, p in m.PROVIDERS.items():
+        assert p.auth, key
+        for kind, name in p.auth:
+            assert kind in kinds, (key, kind)
+            assert name and "=" not in name and len(name) <= 64, (key, name)
+    assert m.PROVIDERS["openai_api"].auth[0] == ("api_key", "OPENAI_API_KEY")
+    assert m.PROVIDERS["docker_hub"].auth == (("basic", "DOCKERHUB_USERNAME"), ("token", "DOCKERHUB_TOKEN"))
+    assert m.PROVIDERS["wikimedia_api"].auth == (("none", "no key required"),)
+    assert m.PROVIDERS["claude_code"].auth[0][0] == "oauth"

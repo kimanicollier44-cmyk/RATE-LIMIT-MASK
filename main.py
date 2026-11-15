@@ -2,8 +2,9 @@
 """
 RATE-LIMIT-MASK — educational reverse-engineering lab for API rate limits.
 
-One runtime "mask" in front of fifty-seven limit systems (seven
-deep-modelled, fifty registry companions added 2026-11-13):
+One runtime "mask" in front of one hundred fifty-seven limit systems
+(seven deep-modelled, fifty registry companions, one hundred
+published-limit companions, all added 2026-11-13):
   GitHub REST/GraphQL/Search, Gemini API, Meta Model API (Muse),
   Google Flow (credits, not an API), OpenAI API (ChatGPT models),
   Anthropic Claude API, and Claude Code (subscription windows).
@@ -21,6 +22,7 @@ says so on every record and the parsers trust live headers over it.
 Run:  python main.py           (full self-demo, CHECKS)
       python main.py providers (registry as JSON)
       python main.py simulate github_rest 6
+      python main.py auth [provider]  (secrets/variables by name only)
 """
 from __future__ import annotations
 
@@ -49,6 +51,7 @@ class Provider:
     reset_rule: str
     snapshot: tuple           # (label, value) headline numbers, dated
     notes: str
+    auth: tuple = ()            # secrets/variables by NAME only: (kind, name); never a value
 
 PROVIDERS = {
     "github_rest": Provider(
@@ -70,7 +73,8 @@ PROVIDERS = {
                   ("secondary_concurrency", "100 concurrent"),
                   ("secondary_content", "80/min and 500/h content-creating")),
         notes="Conditional requests: an authenticated 304 does NOT count against the primary limit. /rate_limit itself is free.",
-    ),
+    
+        auth=(('token', 'GITHUB_TOKEN'), ('oauth', 'GitHub OAuth token')),),
     "gemini_api": Provider(
         key="gemini_api", name="Google Gemini API (AI Studio)", kind="api",
         scope="per project (not per key), tier set by billing account",
@@ -83,7 +87,8 @@ PROVIDERS = {
                   ("free_2.5_flash_lite", "15 RPM / 250,000 TPM / 1,000 RPD"),
                   ("paid_tiers", "Tier 1/2/3 raise all three; RPD cap lifts on paid")),
         notes="Three independent meters, first-hit wins: 15 tiny requests can exhaust RPM with TPM almost untouched.",
-    ),
+    
+        auth=(('api_key', 'GEMINI_API_KEY'),),),
     "muse_model_api": Provider(
         key="muse_model_api", name="Meta Model API (Muse Spark / Wonder / Ember)", kind="api",
         scope="per team, per model (all keys in a team share one budget)",
@@ -101,7 +106,8 @@ PROVIDERS = {
                   ("background_responses", "600 submissions/min per team"),
                   ("voice_transcribe", "256 concurrent streams / 16,000 streams per hour")),
         notes="No tiers to climb: fixed per-team limits. Contributor is cheaper and slower, and its content may be used for training.",
-    ),
+    
+        auth=(('api_key', 'MODEL_API_KEY'),),),
     "google_flow": Provider(
         key="google_flow", name="Google Flow (Veo / Omni in Labs)", kind="credit_app",
         scope="per Google account: a daily credit grant plus a monthly plan pool",
@@ -117,7 +123,8 @@ PROVIDERS = {
                   ("veo_fast_cost", "20 credits (10 on Ultra)"),
                   ("veo_quality_cost", "100 credits")),
         notes="NOT an API rate limit: a credit ledger. Reverse-engineering it means modelling cost-per-generation against two buckets, daily first.",
-    ),
+    
+        auth=(('account', 'Google account'),),),
     "openai_api": Provider(
         key="openai_api", name="OpenAI API (ChatGPT models)", kind="api",
         scope="per organization AND per project, per model (not per user/key)",
@@ -134,7 +141,8 @@ PROVIDERS = {
                   ("grow_luna", "30,000 RPM / 180,000,000 TPM"),
                   ("tier_entry", "Build $5 / Launch $100 / Grow $500 total credit purchases")),
         notes="TPM counts cached input too (unlike Anthropic). Long-context requests on long-context models carry a separate limit.",
-    ),
+    
+        auth=(('api_key', 'OPENAI_API_KEY'),),),
     "claude_api": Provider(
         key="claude_api", name="Anthropic Claude API", kind="api",
         scope="per organization, per model; usage tier set automatically",
@@ -150,7 +158,8 @@ PROVIDERS = {
                   ("build_tier", "10,000 RPM / 5,000,000 ITPM / 1,000,000 OTPM"),
                   ("scale_tier", "13,000 RPM / 10,000,000 ITPM / 2,000,000 OTPM")),
         notes="Input and output tokens are metered SEPARATELY (ITPM vs OTPM) and cache reads do not count toward ITPM on current models.",
-    ),
+    
+        auth=(('api_key', 'ANTHROPIC_API_KEY'),),),
     "claude_code": Provider(
         key="claude_code", name="Claude Code (subscription)", kind="subscription_agent",
         scope="per subscription account, SHARED across Claude Code + Claude apps + Cowork",
@@ -162,7 +171,8 @@ PROVIDERS = {
                   ("max_5x", "~50-200 prompts per 5h window"),
                   ("max_20x", "~200-800 prompts per 5h window")),
         notes="A completely different regime from the Claude API: no RPM/TPM, no fixed prompt count — a long Opus session over a big repo burns the window far faster than short Haiku prompts. API keys do NOT use this regime.",
-    ),
+    
+        auth=(('oauth', 'Claude Code OAuth token'), ('api_key', 'ANTHROPIC_API_KEY')),),
 }
 
 CORE_PROVIDERS = tuple(PROVIDERS)   # the original seven, deep-modelled
@@ -183,7 +193,8 @@ MORE_PROVIDERS = {
         reset_rule="per-second and per-minute windows; monthly token cap per billing cycle",
         snapshot=(("free_experiment", "~1 req/s class, token caps per month"),
                   ("paid", "limits scale with payment tier")),
-        notes="Free Experiment plan is deliberately tiny; paid ceilings rise with cumulative spend."),
+        notes="Free Experiment plan is deliberately tiny; paid ceilings rise with cumulative spend.",
+        auth=(('api_key', 'MISTRAL_API_KEY'),),),
     "cohere": Provider(
         key="cohere", name="Cohere API", kind="api",
         scope="per API key; trial vs production keys",
@@ -193,7 +204,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows; trial keys also carry a monthly call cap",
         snapshot=(("trial", "~20 RPM class, 1,000 calls/month"),
                   ("production", "higher RPM by plan")),
-        notes="Trial keys are for evaluation only — production keys lift both meters."),
+        notes="Trial keys are for evaluation only — production keys lift both meters.",
+        auth=(('api_key', 'COHERE_API_KEY'),),),
     "xai_grok": Provider(
         key="xai_grok", name="xAI Grok API", kind="api",
         scope="per team, per model",
@@ -202,7 +214,8 @@ MORE_PROVIDERS = {
         on_limit="429 with rate-limit headers",
         reset_rule="per-minute windows per model",
         snapshot=(("standard", "per-model RPM/TPM, tiered by team spend"),),
-        notes="Same header dialect family as OpenAI/Muse; ceilings published per model."),
+        notes="Same header dialect family as OpenAI/Muse; ceilings published per model.",
+        auth=(('api_key', 'XAI_API_KEY'),),),
     "deepseek": Provider(
         key="deepseek", name="DeepSeek API", kind="api",
         scope="per account",
@@ -211,7 +224,8 @@ MORE_PROVIDERS = {
         on_limit="429 under load; no fixed published RPM",
         reset_rule="dynamic server-side throttling, no fixed window published",
         snapshot=(("chat_reasoner", "no fixed published RPM; concurrency throttled dynamically"),),
-        notes="The honest outlier: DeepSeek publishes no hard RPM — the mask can only honour 429s and back off."),
+        notes="The honest outlier: DeepSeek publishes no hard RPM — the mask can only honour 429s and back off.",
+        auth=(('api_key', 'DEEPSEEK_API_KEY'),),),
     "groq": Provider(
         key="groq", name="Groq API", kind="api",
         scope="per organization, per model",
@@ -222,7 +236,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute and per-day windows per model",
         snapshot=(("free", "~30 RPM class; per-model daily caps (e.g. 1,000 RPD on 70B-class)"),
                   ("developer_paid", "higher per-model ceilings")),
-        notes="Four meters per model — RPD is the one free-tier agents actually hit."),
+        notes="Four meters per model — RPD is the one free-tier agents actually hit.",
+        auth=(('api_key', 'GROQ_API_KEY'),),),
     "together_ai": Provider(
         key="together_ai", name="Together AI API", kind="api",
         scope="per account, per model; tier set by payments",
@@ -232,7 +247,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows; tiers rise with billing history",
         snapshot=(("entry", "~60 RPM class to start"),
                   ("scaled", "ceilings rise with spend tiers")),
-        notes="Serverless endpoints and dedicated endpoints meter differently."),
+        notes="Serverless endpoints and dedicated endpoints meter differently.",
+        auth=(('api_key', 'TOGETHER_API_KEY'),),),
     "fireworks_ai": Provider(
         key="fireworks_ai", name="Fireworks AI API", kind="api",
         scope="per account, per deployment",
@@ -241,7 +257,8 @@ MORE_PROVIDERS = {
         on_limit="429 quota_exceeded",
         reset_rule="per-minute windows; quota raises are account-managed",
         snapshot=(("pay_as_you_go", "per-model RPM/TPM by account tier"),),
-        notes="Default quotas are starting points; production ceilings are negotiated."),
+        notes="Default quotas are starting points; production ceilings are negotiated.",
+        auth=(('api_key', 'FIREWORKS_API_KEY'),),),
     "perplexity": Provider(
         key="perplexity", name="Perplexity Sonar API", kind="api",
         scope="per account; tier set by cumulative spend",
@@ -251,7 +268,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows; tier ladder by total credits purchased",
         snapshot=(("tier_0", "low RPM to start"),
                   ("higher_tiers", "RPM climbs the spend ladder")),
-        notes="A spend ladder like OpenAI's, but RPM is the headline meter."),
+        notes="A spend ladder like OpenAI's, but RPM is the headline meter.",
+        auth=(('api_key', 'PERPLEXITY_API_KEY'),),),
     "replicate": Provider(
         key="replicate", name="Replicate API", kind="api",
         scope="per account / API token",
@@ -261,7 +279,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute request windows; prediction creation throttles separately",
         snapshot=(("no_payment_method", "heavily throttled prediction creation"),
                   ("paid", "~hundreds of API requests/min class")),
-        notes="Two different throttles: raw API calls vs prediction creation."),
+        notes="Two different throttles: raw API calls vs prediction creation.",
+        auth=(('token', 'REPLICATE_API_TOKEN'),),),
     "huggingface": Provider(
         key="huggingface", name="Hugging Face Hub + Inference", kind="api",
         scope="per user / organization token",
@@ -271,7 +290,8 @@ MORE_PROVIDERS = {
         reset_rule="rolling 5-minute windows on the Hub API",
         snapshot=(("free_hub", "~1,000 requests / 5 min class"),
                   ("pro_enterprise", "higher windows + more inference credits")),
-        notes="Hub API and Inference Providers are two regimes sharing one token."),
+        notes="Hub API and Inference Providers are two regimes sharing one token.",
+        auth=(('token', 'HF_TOKEN'),),),
     "azure_openai": Provider(
         key="azure_openai", name="Azure OpenAI", kind="api",
         scope="per deployment, per region, inside a subscription quota",
@@ -281,7 +301,8 @@ MORE_PROVIDERS = {
         on_limit="429 Too Many Requests when deployment quota is spent",
         reset_rule="per-minute quota per deployment; quota is allocated, not global",
         snapshot=(("standard_deployment", "RPM/TPM set by the quota you assign the deployment"),),
-        notes="The budget lives on the deployment, so one deployment starving says nothing about its neighbour."),
+        notes="The budget lives on the deployment, so one deployment starving says nothing about its neighbour.",
+        auth=(('api_key', 'AZURE_OPENAI_API_KEY'), ('api_key', 'AZURE_OPENAI_ENDPOINT')),),
     "aws_bedrock": Provider(
         key="aws_bedrock", name="AWS Bedrock", kind="api",
         scope="per AWS account, per region, per model (service quotas)",
@@ -290,7 +311,8 @@ MORE_PROVIDERS = {
         on_limit="ThrottlingException / 429 ServiceQuotaExceeded",
         reset_rule="per-minute service quotas; increases via Service Quotas console",
         snapshot=(("default_quotas", "per-model RPM/TPM, account-level, region-scoped"),),
-        notes="Quotas are per region — the same model is a different budget in us-east-1 and eu-west-1."),
+        notes="Quotas are per region — the same model is a different budget in us-east-1 and eu-west-1.",
+        auth=(('keys', 'AWS_ACCESS_KEY_ID'), ('keys', 'AWS_SECRET_ACCESS_KEY')),),
     "vertex_ai": Provider(
         key="vertex_ai", name="Google Vertex AI", kind="api",
         scope="per project, per region, per model (shared quota pool)",
@@ -299,7 +321,8 @@ MORE_PROVIDERS = {
         on_limit="429 RESOURCE_EXHAUSTED when the shared quota pool is spent",
         reset_rule="per-minute quotas, shared across features using the same model",
         snapshot=(("gemini_on_vertex", "online-prediction QPM/TPM quotas per project+region"),),
-        notes="Vertex and AI Studio meter the same Google models through different budgets."),
+        notes="Vertex and AI Studio meter the same Google models through different budgets.",
+        auth=(('service_account', 'GOOGLE_APPLICATION_CREDENTIALS'),),),
     "openrouter": Provider(
         key="openrouter", name="OpenRouter API", kind="api",
         scope="per account / key; free-model pool is separate",
@@ -309,7 +332,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute window; free models also carry a daily cap",
         snapshot=(("free_models", "~20 RPM and ~50 RPD (daily cap rises after a credit purchase)"),
                   ("paid_models", "limited mainly by your credit balance")),
-        notes="A router: upstream provider limits still apply underneath OpenRouter's own."),
+        notes="A router: upstream provider limits still apply underneath OpenRouter's own.",
+        auth=(('api_key', 'OPENROUTER_API_KEY'),),),
     "elevenlabs": Provider(
         key="elevenlabs", name="ElevenLabs API", kind="api",
         scope="per account / plan",
@@ -319,7 +343,8 @@ MORE_PROVIDERS = {
         reset_rule="concurrency is instant; character quota resets per billing cycle",
         snapshot=(("free", "low concurrency, small monthly character quota"),
                   ("paid_plans", "concurrency and characters scale by plan")),
-        notes="A concurrency ceiling plus a monthly character ledger — two shapes at once."),
+        notes="A concurrency ceiling plus a monthly character ledger — two shapes at once.",
+        auth=(('api_key', 'ELEVENLABS_API_KEY'),),),
     "deepl": Provider(
         key="deepl", name="DeepL API", kind="api",
         scope="per API key / plan",
@@ -329,7 +354,8 @@ MORE_PROVIDERS = {
         reset_rule="monthly character ledger; per-minute burst throttle on top",
         snapshot=(("free", "500,000 characters/month"),
                   ("pro", "character volume by plan, 456 when spent")),
-        notes="DeepL has a dedicated quota status code (456) — most APIs fold it into 429."),
+        notes="DeepL has a dedicated quota status code (456) — most APIs fold it into 429.",
+        auth=(('api_key', 'DEEPL_API_KEY'),),),
     "stability_ai": Provider(
         key="stability_ai", name="Stability AI API", kind="api",
         scope="per organization / account",
@@ -338,7 +364,8 @@ MORE_PROVIDERS = {
         on_limit="429 rate limit; generations also spend credits",
         reset_rule="short burst window plus a credit balance that only refills by purchase/grant",
         snapshot=(("standard", "burst throttle per account; every generation priced in credits"),),
-        notes="Like Flow, a credit ledger wearing an API's clothes."),
+        notes="Like Flow, a credit ledger wearing an API's clothes.",
+        auth=(('api_key', 'STABILITY_API_KEY'),),),
     "runway": Provider(
         key="runway", name="Runway API", kind="api",
         scope="per organization; tier set by usage",
@@ -347,7 +374,8 @@ MORE_PROVIDERS = {
         on_limit="429 throttling on task creation",
         reset_rule="per-minute creation throttle; generations gated by concurrency + credits",
         snapshot=(("api_tiers", "task-creation RPM and concurrency scale by tier"),),
-        notes="Video generation: the scarce resource is concurrent tasks, not raw requests."),
+        notes="Video generation: the scarce resource is concurrent tasks, not raw requests.",
+        auth=(('api_key', 'RUNWAYML_API_SECRET'),),),
     "assemblyai": Provider(
         key="assemblyai", name="AssemblyAI API", kind="api",
         scope="per account / plan",
@@ -356,7 +384,8 @@ MORE_PROVIDERS = {
         on_limit="429 when the concurrency cap for the plan is reached",
         reset_rule="concurrency frees as jobs finish; request throttle is per-minute",
         snapshot=(("pay_as_you_go", "concurrency cap by plan; hours are the billed unit"),),
-        notes="Async shape: submit cheap, concurrency is the wall."),
+        notes="Async shape: submit cheap, concurrency is the wall.",
+        auth=(('api_key', 'ASSEMBLYAI_API_KEY'),),),
     "ai21": Provider(
         key="ai21", name="AI21 API", kind="api",
         scope="per account; trial vs paid",
@@ -366,7 +395,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows per endpoint family",
         snapshot=(("trial", "low RPM evaluation tier"),
                   ("paid", "higher RPM/TPM by plan")),
-        notes="Endpoint families (chat vs task-specific) meter separately."),
+        notes="Endpoint families (chat vs task-specific) meter separately.",
+        auth=(('api_key', 'AI21_API_KEY'),),),
     "voyage_ai": Provider(
         key="voyage_ai", name="Voyage AI API", kind="api",
         scope="per account / payment tier",
@@ -376,7 +406,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows; tiers unlock with a payment method and spend",
         snapshot=(("no_payment_method", "very low RPM/TPM evaluation limits"),
                   ("tiered_paid", "ceilings climb the payment tiers")),
-        notes="Embeddings/rerank shop: the payment method itself is the tier gate."),
+        notes="Embeddings/rerank shop: the payment method itself is the tier gate.",
+        auth=(('api_key', 'VOYAGE_API_KEY'),),),
     "jina_ai": Provider(
         key="jina_ai", name="Jina AI (Reader / Embeddings)", kind="api",
         scope="per API key; keyless reader access is lower",
@@ -386,7 +417,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute windows per endpoint",
         snapshot=(("with_key", "~hundreds of RPM class per endpoint"),
                   ("keyless_reader", "lower per-IP caps")),
-        notes="Reader, embeddings and reranker share one key but not one meter."),
+        notes="Reader, embeddings and reranker share one key but not one meter.",
+        auth=(('api_key', 'JINA_API_KEY'),),),
     "langsmith": Provider(
         key="langsmith", name="LangSmith API", kind="api",
         scope="per workspace / organization plan",
@@ -396,7 +428,8 @@ MORE_PROVIDERS = {
         reset_rule="per-minute API windows; monthly trace ledger per plan",
         snapshot=(("developer", "small monthly trace allowance"),
                   ("plus_enterprise", "trace volume and API ceilings by plan")),
-        notes="Observability tooling with its own two-shape limit: ingest ledger + API throttle."),
+        notes="Observability tooling with its own two-shape limit: ingest ledger + API throttle.",
+        auth=(('api_key', 'LANGSMITH_API_KEY'),),),
     "pinecone": Provider(
         key="pinecone", name="Pinecone API", kind="api",
         scope="per project / index",
@@ -405,7 +438,8 @@ MORE_PROVIDERS = {
         on_limit="429 RESOURCE_EXHAUSTED per index or project",
         reset_rule="per-minute/per-second ceilings per index on serverless",
         snapshot=(("serverless", "per-index request ceilings; data-plane and control-plane split"),),
-        notes="Control plane (manage indexes) and data plane (query/upsert) limit separately."),
+        notes="Control plane (manage indexes) and data plane (query/upsert) limit separately.",
+        auth=(('api_key', 'PINECONE_API_KEY'),),),
 }
 
 MORE_PROVIDERS.update({
@@ -418,7 +452,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-minute windows; general authenticated traffic ~2,000 req/min per user",
         snapshot=(("authenticated_general", "~2,000 req/min per user"),
                   ("endpoint_specific", "search, package and CI endpoints carry tighter caps")),
-        notes="GitLab publishes per-endpoint limit families on top of the general one."),
+        notes="GitLab publishes per-endpoint limit families on top of the general one.",
+        auth=(('token', 'GITLAB_TOKEN'),),),
     "bitbucket": Provider(
         key="bitbucket", name="Bitbucket Cloud API", kind="api",
         scope="per user",
@@ -427,7 +462,8 @@ MORE_PROVIDERS.update({
         on_limit="429 Too Many Requests",
         reset_rule="hourly window per user",
         snapshot=(("api", "~1,000 requests/hour per user"),),
-        notes="An hourly budget — the opposite shape from per-minute APIs."),
+        notes="An hourly budget — the opposite shape from per-minute APIs.",
+        auth=(('token', 'BITBUCKET_ACCESS_TOKEN'), ('basic', 'Atlassian API token')),),
     "docker_hub": Provider(
         key="docker_hub", name="Docker Hub", kind="api",
         scope="per IP (anonymous pulls) / per account (authenticated)",
@@ -438,7 +474,8 @@ MORE_PROVIDERS.update({
         snapshot=(("anonymous", "100 pulls / 6 h per IP"),
                   ("free_authenticated", "200 pulls / 6 h per account"),
                   ("pro_team_business", "no pull cap")),
-        notes="The limit that bites CI fleets: it counts image pulls, not API calls."),
+        notes="The limit that bites CI fleets: it counts image pulls, not API calls.",
+        auth=(('basic', 'DOCKERHUB_USERNAME'), ('token', 'DOCKERHUB_TOKEN')),),
     "npm_registry": Provider(
         key="npm_registry", name="npm Registry API", kind="api",
         scope="per IP / per token",
@@ -447,7 +484,8 @@ MORE_PROVIDERS.update({
         on_limit="429 / 403 under abuse patterns; no published hard cap",
         reset_rule="no public fixed window; throttles are abuse-driven",
         snapshot=(("registry", "no published hard cap; generous by design, abuse throttles apply"),),
-        notes="A registry, not a metered API — limits exist but are not a product surface."),
+        notes="A registry, not a metered API — limits exist but are not a product surface.",
+        auth=(('token', 'NPM_TOKEN'),),),
     "pypi": Provider(
         key="pypi", name="PyPI (Warehouse) API", kind="api",
         scope="per IP / per project",
@@ -456,7 +494,8 @@ MORE_PROVIDERS.update({
         on_limit="429 under abuse; XML-RPC methods carry their own restrictions",
         reset_rule="no public fixed window; abuse-driven throttling",
         snapshot=(("warehouse", "no published hard cap; large-mirror and scrape traffic is throttled"),),
-        notes="Same family as npm: the cap is real but unpublished — honour 429s."),
+        notes="Same family as npm: the cap is real but unpublished — honour 429s.",
+        auth=(('token', 'PYPI_API_TOKEN'),),),
     "slack": Provider(
         key="slack", name="Slack Web API", kind="api",
         scope="per method tier, per workspace / app",
@@ -466,7 +505,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-minute windows by method tier",
         snapshot=(("tier_1", "~1 req/min"), ("tier_2", "~20 req/min"),
                   ("tier_3", "~50 req/min"), ("tier_4", "~100 req/min")),
-        notes="The cleanest tier system in this registry: every method is labelled Tier 1-4 (or Special)."),
+        notes="The cleanest tier system in this registry: every method is labelled Tier 1-4 (or Special).",
+        auth=(('token', 'SLACK_BOT_TOKEN'),),),
     "discord": Provider(
         key="discord", name="Discord API", kind="api",
         scope="global per bot token + per route buckets",
@@ -477,7 +517,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-route sliding buckets + a 50 req/s global ceiling",
         snapshot=(("global", "50 requests/second per token"),
                   ("invalid_request_cap", "~10,000 invalid requests / 10 min triggers a block")),
-        notes="Discord tells you the bucket and the exact reset — the best-mannered 429 here."),
+        notes="Discord tells you the bucket and the exact reset — the best-mannered 429 here.",
+        auth=(('token', 'DISCORD_BOT_TOKEN'),),),
     "telegram": Provider(
         key="telegram", name="Telegram Bot API", kind="api",
         scope="per bot, per chat, per group",
@@ -487,7 +528,8 @@ MORE_PROVIDERS.update({
         reset_rule="~30 msg/s overall per bot; 1 msg/s per chat; ~20/min per group",
         snapshot=(("broadcast", "~30 messages/second per bot"),
                   ("single_chat", "1 message/second"), ("group", "~20 messages/minute")),
-        notes="Three nested scopes at once — bot-wide, per-chat, per-group."),
+        notes="Three nested scopes at once — bot-wide, per-chat, per-group.",
+        auth=(('token', 'TELEGRAM_BOT_TOKEN'),),),
     "twilio": Provider(
         key="twilio", name="Twilio API", kind="api",
         scope="per account (calls-per-second for voice; API concurrency)",
@@ -497,7 +539,8 @@ MORE_PROVIDERS.update({
         reset_rule="short windows; voice CPS is an account setting, not a window",
         snapshot=(("voice_cps_default", "1 call/second until raised"),
                   ("api", "concurrency ceilings per account")),
-        notes="Telephony shape: calls-per-second is provisioned, not windowed."),
+        notes="Telephony shape: calls-per-second is provisioned, not windowed.",
+        auth=(('basic', 'TWILIO_ACCOUNT_SID'), ('basic', 'TWILIO_AUTH_TOKEN')),),
     "sendgrid": Provider(
         key="sendgrid", name="SendGrid API", kind="api",
         scope="per account / API key",
@@ -506,7 +549,8 @@ MORE_PROVIDERS.update({
         on_limit="429 too many requests",
         reset_rule="per-minute windows (v3 API ~hundreds of requests/min class)",
         snapshot=(("v3_api", "~600 requests/min class for mail send; other endpoints lower"),),
-        notes="Mail send is the generous endpoint; stats and suppression endpoints are tighter."),
+        notes="Mail send is the generous endpoint; stats and suppression endpoints are tighter.",
+        auth=(('api_key', 'SENDGRID_API_KEY'),),),
     "stripe": Provider(
         key="stripe", name="Stripe API", kind="api",
         scope="per account, live vs test mode",
@@ -516,7 +560,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-second ceilings: ~100 req/s live mode, ~25 req/s test mode",
         snapshot=(("live_mode", "~100 requests/second"),
                   ("test_mode", "~25 requests/second")),
-        notes="Payments: the limit you feel is usually your own webhook/DB, not Stripe's."),
+        notes="Payments: the limit you feel is usually your own webhook/DB, not Stripe's.",
+        auth=(('api_key', 'STRIPE_SECRET_KEY'),),),
     "reddit": Provider(
         key="reddit", name="Reddit API", kind="api",
         scope="per OAuth client id",
@@ -526,7 +571,8 @@ MORE_PROVIDERS.update({
         reset_rule="100 queries/minute averaged over a 10-minute window per OAuth client",
         snapshot=(("oauth", "~100 QPM averaged (10-min smoothing window)"),
                   ("unauthenticated", "much lower, per IP")),
-        notes="Reddit averages: bursts are fine, sustained rate is what counts."),
+        notes="Reddit averages: bursts are fine, sustained rate is what counts.",
+        auth=(('oauth', 'REDDIT_CLIENT_ID'), ('oauth', 'REDDIT_CLIENT_SECRET')),),
     "x_api": Provider(
         key="x_api", name="X (Twitter) API", kind="api",
         scope="per app / per user token, per endpoint, 15-minute windows",
@@ -535,7 +581,8 @@ MORE_PROVIDERS.update({
         on_limit="429 too many requests at the window edge",
         reset_rule="fixed 15-minute windows per endpoint; caps differ per product tier",
         snapshot=(("basic_pro", "per-endpoint caps per 15 min + monthly post caps by tier"),),
-        notes="Two regimes stacked: 15-minute endpoint windows and monthly consumption caps."),
+        notes="Two regimes stacked: 15-minute endpoint windows and monthly consumption caps.",
+        auth=(('api_key', 'X_API_KEY'), ('api_key', 'X_API_SECRET'), ('token', 'X_ACCESS_TOKEN')),),
     "spotify": Provider(
         key="spotify", name="Spotify Web API", kind="api",
         scope="per app (client id), rolling window",
@@ -544,7 +591,8 @@ MORE_PROVIDERS.update({
         on_limit="429 with Retry-After in seconds",
         reset_rule="rolling 30-second window; the exact ceiling is undisclosed",
         snapshot=(("web_api", "rolling 30 s window; cap undisclosed — honour Retry-After"),),
-        notes="The ceiling is a secret; Retry-After is the whole contract."),
+        notes="The ceiling is a secret; Retry-After is the whole contract.",
+        auth=(('oauth', 'SPOTIFY_CLIENT_ID'), ('oauth', 'SPOTIFY_CLIENT_SECRET')),),
     "youtube": Provider(
         key="youtube", name="YouTube Data API", kind="api",
         scope="per Google Cloud project",
@@ -554,7 +602,8 @@ MORE_PROVIDERS.update({
         reset_rule="10,000 units/day default; units are per-method costs (search = 100)",
         snapshot=(("default_quota", "10,000 units/day"),
                   ("search_call", "100 units"), ("upload", "1,600 units")),
-        notes="A cost-weighted daily ledger — one search costs 100 list calls."),
+        notes="A cost-weighted daily ledger — one search costs 100 list calls.",
+        auth=(('api_key', 'YOUTUBE_API_KEY'),),),
     "google_maps": Provider(
         key="google_maps", name="Google Maps Platform", kind="api",
         scope="per API key / project, per Maps API",
@@ -563,7 +612,8 @@ MORE_PROVIDERS.update({
         on_limit="429 / OVER_QUERY_LIMIT status per API",
         reset_rule="per-API quotas (QPM/QPD) set in Cloud Console; billing-coupled",
         snapshot=(("per_api", "each Maps API carries its own QPM/QPD quota"),),
-        notes="Not one Maps limit but ~40 small ones, one per API surface."),
+        notes="Not one Maps limit but ~40 small ones, one per API surface.",
+        auth=(('api_key', 'GOOGLE_MAPS_API_KEY'),),),
     "cloudflare": Provider(
         key="cloudflare", name="Cloudflare API", kind="api",
         scope="per user / token",
@@ -572,7 +622,8 @@ MORE_PROVIDERS.update({
         on_limit="429 error 971 / rate-limit responses past the window",
         reset_rule="global API ceiling ~1,200 requests per 5 minutes per user",
         snapshot=(("global_api", "~1,200 requests / 5 min per user"),),
-        notes="One generous global ceiling; individual products add their own underneath."),
+        notes="One generous global ceiling; individual products add their own underneath.",
+        auth=(('token', 'CLOUDFLARE_API_TOKEN'),),),
     "vercel": Provider(
         key="vercel", name="Vercel API", kind="api",
         scope="per account / team, by plan",
@@ -581,7 +632,8 @@ MORE_PROVIDERS.update({
         on_limit="429 rate_limited with reset headers",
         reset_rule="per-minute windows; ceilings scale with plan",
         snapshot=(("api", "per-endpoint limits by plan, headers report the window"),),
-        notes="Headers-first design: the API tells you its own budget on every response."),
+        notes="Headers-first design: the API tells you its own budget on every response.",
+        auth=(('token', 'VERCEL_TOKEN'),),),
     "supabase": Provider(
         key="supabase", name="Supabase APIs", kind="api",
         scope="per project (Auth, REST, Storage meter separately)",
@@ -591,7 +643,8 @@ MORE_PROVIDERS.update({
         reset_rule="Auth email/SMS sends have hourly caps; API ceilings scale by plan",
         snapshot=(("auth_emails", "built-in email provider ~ a few sends/hour until custom SMTP"),
                   ("api", "per-plan request ceilings per project")),
-        notes="The limit people actually meet is the Auth email cap, not the data API."),
+        notes="The limit people actually meet is the Auth email cap, not the data API.",
+        auth=(('api_key', 'SUPABASE_ANON_KEY'), ('api_key', 'SUPABASE_SERVICE_ROLE_KEY')),),
     "notion": Provider(
         key="notion", name="Notion API", kind="api",
         scope="per integration / workspace",
@@ -600,7 +653,8 @@ MORE_PROVIDERS.update({
         on_limit="429 rate_limited",
         reset_rule="average 3 requests/second per integration, bursts tolerated briefly",
         snapshot=(("integrations", "~3 requests/second average"),),
-        notes="An average-rate limit: short bursts pass, sustained hammering does not."),
+        notes="An average-rate limit: short bursts pass, sustained hammering does not.",
+        auth=(('token', 'NOTION_API_KEY'),),),
     "airtable": Provider(
         key="airtable", name="Airtable API", kind="api",
         scope="per base",
@@ -610,7 +664,8 @@ MORE_PROVIDERS.update({
         reset_rule="5 requests/second per base; breaching triggers a 30-second block",
         snapshot=(("per_base", "5 requests/second"),
                   ("breach_penalty", "30-second block")),
-        notes="One of the few APIs that punishes the breach itself with a timeout box."),
+        notes="One of the few APIs that punishes the breach itself with a timeout box.",
+        auth=(('token', 'AIRTABLE_PAT'),),),
     "linear": Provider(
         key="linear", name="Linear API (GraphQL)", kind="api",
         scope="per user / API key",
@@ -621,7 +676,8 @@ MORE_PROVIDERS.update({
         reset_rule="hourly windows on both raw requests and query complexity",
         snapshot=(("requests", "~3,000 requests/hour per user"),
                   ("complexity", "hourly complexity-point budget on top")),
-        notes="GraphQL done right: a cheap query and a monster query cost different amounts."),
+        notes="GraphQL done right: a cheap query and a monster query cost different amounts.",
+        auth=(('api_key', 'LINEAR_API_KEY'),),),
     "twitch": Provider(
         key="twitch", name="Twitch Helix API", kind="api",
         scope="per client id (app token bucket)",
@@ -631,7 +687,8 @@ MORE_PROVIDERS.update({
         reset_rule="~800 points/minute bucket; endpoints cost 1+ points each",
         snapshot=(("app_access", "~800 points/minute"),
                   ("endpoint_cost", "most endpoints 1 point; some cost more")),
-        notes="A token bucket where requests have prices — very close to GitHub GraphQL points."),
+        notes="A token bucket where requests have prices — very close to GitHub GraphQL points.",
+        auth=(('oauth', 'TWITCH_CLIENT_ID'), ('oauth', 'TWITCH_CLIENT_SECRET')),),
     "shopify": Provider(
         key="shopify", name="Shopify APIs", kind="api",
         scope="per store, per app",
@@ -641,7 +698,8 @@ MORE_PROVIDERS.update({
         reset_rule="REST: leaky bucket 40, refills 2/s (Plus: 4/s). GraphQL: cost points refill per second",
         snapshot=(("rest", "bucket 40, ~2 requests/second sustained"),
                   ("graphql", "calculated-cost budget, refills continuously")),
-        notes="Two engines again: REST counts calls, GraphQL counts calculated cost."),
+        notes="Two engines again: REST counts calls, GraphQL counts calculated cost.",
+        auth=(('token', 'SHOPIFY_ACCESS_TOKEN'),),),
     "coinbase": Provider(
         key="coinbase", name="Coinbase Exchange API", kind="api",
         scope="per profile / per IP",
@@ -651,7 +709,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-second burst caps plus hourly ceilings (~10,000 req/h class per profile)",
         snapshot=(("public", "per-IP burst caps on market data"),
                   ("private", "~10,000 requests/hour class per profile")),
-        notes="Public market-data and private trading traffic are metered on different scopes."),
+        notes="Public market-data and private trading traffic are metered on different scopes.",
+        auth=(('api_key', 'COINBASE_API_KEY'), ('api_key', 'COINBASE_API_SECRET')),),
     "openweather": Provider(
         key="openweather", name="OpenWeather API", kind="api",
         scope="per API key / plan",
@@ -661,7 +720,8 @@ MORE_PROVIDERS.update({
         reset_rule="per-minute window + monthly ledger by plan",
         snapshot=(("free", "60 calls/minute, ~1,000,000 calls/month"),
                   ("paid", "per-minute and monthly caps scale by plan")),
-        notes="Weather data: the monthly ledger is the real budget, the minute cap is just burst control."),
+        notes="Weather data: the monthly ledger is the real budget, the minute cap is just burst control.",
+        auth=(('api_key', 'OPENWEATHER_API_KEY'),),),
 })
 
 PROVIDERS.update(MORE_PROVIDERS)
@@ -679,7 +739,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 rate_limit_exceeded",
         reset_rule="per-minute and per-day windows",
         snapshot=(("free", "~30 RPM class, per-model daily caps"),),
-        notes="Very fast inference; free tier daily token caps are the binding meter."),
+        notes="Very fast inference; free tier daily token caps are the binding meter.",
+        auth=(('api_key', 'CEREBRAS_API_KEY'),),),
     "sambanova": Provider(
         key="sambanova", name="SambaNova Cloud API", kind="api",
         scope="per account, per model",
@@ -688,7 +749,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows by tier",
         snapshot=(("tiered", "limits published per model and tier (~)"),),
-        notes="OpenAI-compatible surface; ceilings rise with plan tier."),
+        notes="OpenAI-compatible surface; ceilings rise with plan tier.",
+        auth=(('api_key', 'SAMBANOVA_API_KEY'),),),
     "fal_ai": Provider(
         key="fal_ai", name="fal.ai API", kind="api",
         scope="per account",
@@ -697,7 +759,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / concurrency rejection",
         reset_rule="concurrency window, queue-based",
         snapshot=(("queue", "concurrency-capped; requests queue instead of failing (~)"),),
-        notes="Media generation: the meter is concurrent runs, not raw RPM."),
+        notes="Media generation: the meter is concurrent runs, not raw RPM.",
+        auth=(('api_key', 'FAL_KEY'),),),
     "baseten": Provider(
         key="baseten", name="Baseten API", kind="api",
         scope="per workspace, per model",
@@ -706,7 +769,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / queue on concurrency cap",
         reset_rule="per-model concurrency window",
         snapshot=(("deployed_model", "concurrency limits set per deployment (~)"),),
-        notes="Self-serve model hosting; autoscaling ceilings act as the limit."),
+        notes="Self-serve model hosting; autoscaling ceilings act as the limit.",
+        auth=(('api_key', 'BASETEN_API_KEY'),),),
     "modal": Provider(
         key="modal", name="Modal API", kind="api",
         scope="per workspace",
@@ -715,7 +779,8 @@ MORE_PROVIDERS_100 = {
         on_limit="resource limit errors at cap",
         reset_rule="concurrency quotas per workspace",
         snapshot=(("workspace", "container/GPU concurrency quotas by plan (~)"),),
-        notes="Serverless compute: quotas are concurrency and GPU count, not RPM."),
+        notes="Serverless compute: quotas are concurrency and GPU count, not RPM.",
+        auth=(('token', 'MODAL_TOKEN_ID'), ('token', 'MODAL_TOKEN_SECRET')),),
     "datadog_api": Provider(
         key="datadog_api", name="Datadog API", kind="api",
         scope="per organization, per endpoint",
@@ -724,7 +789,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-endpoint hourly windows; headers name the period",
         snapshot=(("configured", "per-endpoint limits configured per org; headers report limit/period/remaining (~)"),),
-        notes="One of the better-documented header dialects: limit, period, remaining, reset."),
+        notes="One of the better-documented header dialects: limit, period, remaining, reset.",
+        auth=(('api_key', 'DD_API_KEY'), ('api_key', 'DD_APP_KEY')),),
     "sentry_api": Provider(
         key="sentry_api", name="Sentry API", kind="api",
         scope="per organization / auth token",
@@ -733,7 +799,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-Sentry-Rate-Limits header",
         reset_rule="concurrent + per-minute windows",
         snapshot=(("org", "concurrent caps + per-minute rates, described in X-Sentry-Rate-Limits (~)"),),
-        notes="Rate limit state is packed into a single structured header."),
+        notes="Rate limit state is packed into a single structured header.",
+        auth=(('token', 'SENTRY_AUTH_TOKEN'),),),
     "new_relic_api": Provider(
         key="new_relic_api", name="New Relic APIs (NerdGraph / REST)", kind="api",
         scope="per account / key",
@@ -742,7 +809,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-minute windows",
         snapshot=(("account", "per-key RPM ceilings by API (~)"),),
-        notes="NerdGraph and REST keys are metered separately."),
+        notes="NerdGraph and REST keys are metered separately.",
+        auth=(('api_key', 'NEW_RELIC_API_KEY'),),),
     "pagerduty_api": Provider(
         key="pagerduty_api", name="PagerDuty API", kind="api",
         scope="per account",
@@ -751,7 +819,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with ratelimit headers",
         reset_rule="per-minute window per account",
         snapshot=(("default", "~960 requests/minute per account class (~)"),),
-        notes="Published default ceiling; abuse can lower it per account."),
+        notes="Published default ceiling; abuse can lower it per account.",
+        auth=(('token', 'PAGERDUTY_API_TOKEN'),),),
     "grafana_api": Provider(
         key="grafana_api", name="Grafana / Grafana Cloud API", kind="api",
         scope="per instance / stack",
@@ -760,7 +829,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-second windows",
         snapshot=(("cloud", "per-stack request quotas by plan (~)"),),
-        notes="Self-hosted instances set their own limits; Cloud publishes plan quotas."),
+        notes="Self-hosted instances set their own limits; Cloud publishes plan quotas.",
+        auth=(('token', 'GRAFANA_API_KEY'),),),
     "digitalocean_api": Provider(
         key="digitalocean_api", name="DigitalOcean API", kind="api",
         scope="per OAuth token / team",
@@ -769,7 +839,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with RateLimit headers",
         reset_rule="rolling hourly window, reset header in epoch",
         snapshot=(("oauth", "5,000 requests/hour, burst ~250 endpoints class (~)"),),
-        notes="Classic hourly bucket with full RateLimit-* response headers."),
+        notes="Classic hourly bucket with full RateLimit-* response headers.",
+        auth=(('token', 'DIGITALOCEAN_TOKEN'),),),
     "linode_api": Provider(
         key="linode_api", name="Linode API (Akamai Cloud)", kind="api",
         scope="per user, per endpoint class",
@@ -778,7 +849,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-endpoint-class windows (GET vs mutation differ)",
         snapshot=(("default", "per-endpoint rates published; mutations metered tighter (~)"),),
-        notes="Different endpoints carry different per-minute ceilings."),
+        notes="Different endpoints carry different per-minute ceilings.",
+        auth=(('token', 'LINODE_TOKEN'),),),
     "vultr_api": Provider(
         key="vultr_api", name="Vultr API", kind="api",
         scope="per API key",
@@ -787,7 +859,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-second window",
         snapshot=(("default", "~30 requests/second class (~)"),),
-        notes="Simple per-second throttle per key."),
+        notes="Simple per-second throttle per key.",
+        auth=(('api_key', 'VULTR_API_KEY'),),),
     "heroku_api": Provider(
         key="heroku_api", name="Heroku Platform API", kind="api",
         scope="per account",
@@ -796,7 +869,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with rate limit headers",
         reset_rule="rolling hourly window",
         snapshot=(("account", "4,500 calls/hour per account"),),
-        notes="Token-bucket style hourly allowance, headers on every response."),
+        notes="Token-bucket style hourly allowance, headers on every response.",
+        auth=(('api_key', 'HEROKU_API_KEY'),),),
     "netlify_api": Provider(
         key="netlify_api", name="Netlify API", kind="api",
         scope="per user / site",
@@ -805,7 +879,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows per route class",
         snapshot=(("default", "per-route RPM ceilings published in docs (~)"),),
-        notes="Deploy and site routes have separate ceilings."),
+        notes="Deploy and site routes have separate ceilings.",
+        auth=(('token', 'NETLIFY_AUTH_TOKEN'),),),
     "render_api": Provider(
         key="render_api", name="Render API", kind="api",
         scope="per workspace",
@@ -814,7 +889,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute window",
         snapshot=(("workspace", "~per-minute ceilings by plan (~)"),),
-        notes="REST API throttled per workspace token."),
+        notes="REST API throttled per workspace token.",
+        auth=(('api_key', 'RENDER_API_KEY'),),),
     "fly_io_api": Provider(
         key="fly_io_api", name="Fly.io API (Machines / GraphQL)", kind="api",
         scope="per organization",
@@ -823,7 +899,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / throttling errors",
         reset_rule="per-minute windows",
         snapshot=(("org", "GraphQL + Machines API throttles by org (~)"),),
-        notes="Two surfaces, one org budget story."),
+        notes="Two surfaces, one org budget story.",
+        auth=(('token', 'FLY_API_TOKEN'),),),
     "neon_api": Provider(
         key="neon_api", name="Neon API", kind="api",
         scope="per API key",
@@ -832,7 +909,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute window",
         snapshot=(("key", "~per-minute ceilings published (~)"),),
-        notes="Database platform API; project operations metered per key."),
+        notes="Database platform API; project operations metered per key.",
+        auth=(('api_key', 'NEON_API_KEY'),),),
     "turso_api": Provider(
         key="turso_api", name="Turso Platform API", kind="api",
         scope="per API token",
@@ -841,7 +919,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute window",
         snapshot=(("token", "per-token RPM ceilings (~)"),),
-        notes="LibSQL platform management API."),
+        notes="LibSQL platform management API.",
+        auth=(('token', 'TURSO_API_TOKEN'),),),
     "upstash_api": Provider(
         key="upstash_api", name="Upstash API (Redis / QStash)", kind="api",
         scope="per account / database",
@@ -850,7 +929,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / quota errors",
         reset_rule="per-second plus plan request quotas",
         snapshot=(("free_db", "per-database throughput caps by plan (~)"),),
-        notes="Data-plane limits (commands/sec) matter more than management RPM."),
+        notes="Data-plane limits (commands/sec) matter more than management RPM.",
+        auth=(('token', 'UPSTASH_REDIS_REST_TOKEN'),),),
     "clerk_api": Provider(
         key="clerk_api", name="Clerk API", kind="api",
         scope="per instance",
@@ -859,7 +939,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with retry headers",
         reset_rule="per-minute windows per instance environment",
         snapshot=(("instance", "per-environment RPM ceilings (~)"),),
-        notes="Dev instances are metered far tighter than production."),
+        notes="Dev instances are metered far tighter than production.",
+        auth=(('api_key', 'CLERK_SECRET_KEY'),),),
     "auth0_api": Provider(
         key="auth0_api", name="Auth0 Management + Authentication APIs", kind="api",
         scope="per tenant",
@@ -868,7 +949,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-tenant windows; burst + sustained pair",
         snapshot=(("tenant", "published per-endpoint burst/sustained pairs, plan-dependent (~)"),),
-        notes="Auth0 publishes some of the most detailed per-endpoint limit tables in SaaS."),
+        notes="Auth0 publishes some of the most detailed per-endpoint limit tables in SaaS.",
+        auth=(('oauth', 'AUTH0_DOMAIN'), ('oauth', 'AUTH0_CLIENT_ID'), ('oauth', 'AUTH0_CLIENT_SECRET')),),
     "okta_api": Provider(
         key="okta_api", name="Okta API", kind="api",
         scope="per organization, per endpoint family",
@@ -877,7 +959,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-Rate-Limit headers",
         reset_rule="per-minute windows per endpoint family, concurrent cap",
         snapshot=(("org", "per-family RPM tables published; concurrent request cap applies (~)"),),
-        notes="The textbook enterprise case: every endpoint family has its own row."),
+        notes="The textbook enterprise case: every endpoint family has its own row.",
+        auth=(('token', 'OKTA_API_TOKEN'),),),
     "microsoft_graph": Provider(
         key="microsoft_graph", name="Microsoft Graph API", kind="api",
         scope="per app + tenant, per service",
@@ -886,7 +969,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After",
         reset_rule="per-service throttling windows; Retry-After is authoritative",
         snapshot=(("app_tenant", "per-service limits (Outlook/Teams/etc each differ) (~)"),),
-        notes="No single Graph limit: each workload service throttles independently."),
+        notes="No single Graph limit: each workload service throttles independently.",
+        auth=(('oauth', 'MICROSOFT_GRAPH_CLIENT_ID'), ('oauth', 'MICROSOFT_GRAPH_CLIENT_SECRET')),),
     "gcp_apis": Provider(
         key="gcp_apis", name="Google Cloud APIs (quota system)", kind="api",
         scope="per project, per API, per metric",
@@ -895,7 +979,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / RESOURCE_EXHAUSTED quota errors",
         reset_rule="per-minute quota windows; daily quotas on some APIs",
         snapshot=(("project", "per-API quota pages; adjustable via Cloud Console quotas (~)"),),
-        notes="Quota is a platform system: every API publishes its own metrics and limits."),
+        notes="Quota is a platform system: every API publishes its own metrics and limits.",
+        auth=(('service_account', 'GOOGLE_APPLICATION_CREDENTIALS'), ('api_key', 'GOOGLE_API_KEY')),),
     "aws_quotas": Provider(
         key="aws_quotas", name="AWS APIs (service quotas + throttling)", kind="api",
         scope="per account + region, per service",
@@ -904,7 +989,8 @@ MORE_PROVIDERS_100 = {
         on_limit="ThrottlingException / 429 by service",
         reset_rule="token-bucket style per service+region; many quotas adjustable",
         snapshot=(("service_region", "per-service TPS + burst published in service docs (~)"),),
-        notes="Throttling is per service, per region, per account — the original multi-dimensional case."),
+        notes="Throttling is per service, per region, per account — the original multi-dimensional case.",
+        auth=(('keys', 'AWS_ACCESS_KEY_ID'), ('keys', 'AWS_SECRET_ACCESS_KEY')),),
     "cloudinary": Provider(
         key="cloudinary", name="Cloudinary API", kind="api",
         scope="per account (cloud)",
@@ -913,7 +999,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-FeatureRateLimit headers",
         reset_rule="hourly windows per feature class",
         snapshot=(("account", "hourly caps per feature (admin/upload/etc) by plan (~)"),),
-        notes="Rate limit headers are split per feature, not one global bucket."),
+        notes="Rate limit headers are split per feature, not one global bucket.",
+        auth=(('api_key', 'CLOUDINARY_API_KEY'), ('api_key', 'CLOUDINARY_API_SECRET'), ('api_key', 'CLOUDINARY_CLOUD_NAME')),),
     "bluesky_atproto": Provider(
         key="bluesky_atproto", name="Bluesky / AT Protocol API", kind="api",
         scope="per account / PDS",
@@ -922,7 +1009,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="points system: 3,000 points per 5 min class; per-endpoint costs",
         snapshot=(("account", "3,000 points/5min global class; createSession etc tighter (~)"),),
-        notes="Points-based like GitHub GraphQL: endpoints cost different points."),
+        notes="Points-based like GitHub GraphQL: endpoints cost different points.",
+        auth=(('basic', 'Bluesky handle'), ('basic', 'Bluesky app password')),),
     "mastodon_api": Provider(
         key="mastodon_api", name="Mastodon API", kind="api",
         scope="per user / IP, per instance",
@@ -931,7 +1019,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="5-minute windows (default instance config)",
         snapshot=(("default", "300 requests per 5 minutes (authenticated default) (~)"),),
-        notes="Limits are per-instance configuration; defaults are widely copied."),
+        notes="Limits are per-instance configuration; defaults are widely copied.",
+        auth=(('token', 'MASTODON_ACCESS_TOKEN'),),),
     "linkedin_api": Provider(
         key="linkedin_api", name="LinkedIn API", kind="api",
         scope="per app + member",
@@ -940,7 +1029,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / throttling errors",
         reset_rule="daily windows per app+member+resource",
         snapshot=(("member_day", "per-resource daily quotas published per product (~)"),),
-        notes="Daily application+member+resource triple-key metering."),
+        notes="Daily application+member+resource triple-key metering.",
+        auth=(('oauth', 'LINKEDIN_CLIENT_ID'), ('oauth', 'LINKEDIN_CLIENT_SECRET')),),
     "pinterest_api": Provider(
         key="pinterest_api", name="Pinterest API", kind="api",
         scope="per app + user",
@@ -949,7 +1039,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-minute + daily windows",
         snapshot=(("app_user", "per-endpoint RPM/daily pairs published (~)"),),
-        notes="Standard and trial access tiers carry different ceilings."),
+        notes="Standard and trial access tiers carry different ceilings.",
+        auth=(('token', 'PINTEREST_ACCESS_TOKEN'),),),
     "tiktok_api": Provider(
         key="tiktok_api", name="TikTok API (Research / Display / Marketing)", kind="api",
         scope="per app / advertiser",
@@ -958,7 +1049,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-endpoint windows by product",
         snapshot=(("app", "per-endpoint QPS/daily tables per product line (~)"),),
-        notes="Each TikTok product API publishes its own throttling table."),
+        notes="Each TikTok product API publishes its own throttling table.",
+        auth=(('oauth', 'TIKTOK_CLIENT_KEY'), ('oauth', 'TIKTOK_CLIENT_SECRET')),),
     "whatsapp_business": Provider(
         key="whatsapp_business", name="WhatsApp Business Platform (Meta)", kind="api",
         scope="per phone number / business",
@@ -967,7 +1059,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / throughput errors",
         reset_rule="per-second messaging throughput tiers + hourly call caps",
         snapshot=(("number", "messaging throughput tiers 80-1,000 msg/s by quality; ~1M API calls/hour class per app (~)"),),
-        notes="Two systems: Graph API call caps AND per-number message throughput by quality rating."),
+        notes="Two systems: Graph API call caps AND per-number message throughput by quality rating.",
+        auth=(('token', 'WHATSAPP_ACCESS_TOKEN'),),),
     "messenger_platform": Provider(
         key="messenger_platform", name="Messenger Platform (Meta)", kind="api",
         scope="per page / app",
@@ -976,7 +1069,8 @@ MORE_PROVIDERS_100 = {
         on_limit="613 / 429 throttling errors",
         reset_rule="per-second app-level + per-page windows",
         snapshot=(("page", "app-level calls/sec caps; Send API has per-page rates (~)"),),
-        notes="Meta's older error-code throttling (code 613) predates plain 429s here."),
+        notes="Meta's older error-code throttling (code 613) predates plain 429s here.",
+        auth=(('token', 'MESSENGER_PAGE_ACCESS_TOKEN'),),),
     "zoom_api": Provider(
         key="zoom_api", name="Zoom API", kind="api",
         scope="per account, by endpoint group",
@@ -985,7 +1079,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-second rates by group (Light/Medium/Heavy/Resource-intensive) + daily caps",
         snapshot=(("account", "endpoint groups carry QPS from ~2 to ~80 by plan; daily caps on heavy groups (~)"),),
-        notes="Zoom publishes limits by endpoint weight class — a model other APIs copy."),
+        notes="Zoom publishes limits by endpoint weight class — a model other APIs copy.",
+        auth=(('oauth', 'ZOOM_CLIENT_ID'), ('oauth', 'ZOOM_CLIENT_SECRET')),),
     "intercom_api": Provider(
         key="intercom_api", name="Intercom API", kind="api",
         scope="per app (workspace)",
@@ -994,7 +1089,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-minute window; headers report limit/remaining/reset",
         snapshot=(("app", "~1,000 requests/minute class per app (~)"),),
-        notes="Clean header dialect, single per-app bucket."),
+        notes="Clean header dialect, single per-app bucket.",
+        auth=(('token', 'INTERCOM_ACCESS_TOKEN'),),),
     "zendesk_api": Provider(
         key="zendesk_api", name="Zendesk API", kind="api",
         scope="per account",
@@ -1003,7 +1099,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After",
         reset_rule="per-minute windows; plan-scaled; some endpoints tighter",
         snapshot=(("account", "700 RPM (Growth) to 2,500 RPM (Enterprise) class; search endpoint tighter (~)"),),
-        notes="Plan-tiered RPM is published in a public limits table."),
+        notes="Plan-tiered RPM is published in a public limits table.",
+        auth=(('token', 'ZENDESK_API_TOKEN'),),),
     "hubspot_api": Provider(
         key="hubspot_api", name="HubSpot API", kind="api",
         scope="per app / portal",
@@ -1012,7 +1109,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="10-second burst window + daily caps by tier",
         snapshot=(("standard", "100 requests/10s burst class; daily caps 250k-1M by tier (~)"),),
-        notes="Burst is measured per 10 seconds, not per minute — window shape matters."),
+        notes="Burst is measured per 10 seconds, not per minute — window shape matters.",
+        auth=(('token', 'HUBSPOT_PRIVATE_APP_TOKEN'),),),
     "salesforce_api": Provider(
         key="salesforce_api", name="Salesforce API", kind="api",
         scope="per org",
@@ -1021,7 +1119,8 @@ MORE_PROVIDERS_100 = {
         on_limit="403 / 429 REQUEST_LIMIT_EXCEEDED",
         reset_rule="rolling 24-hour org allocation + concurrent long-request caps",
         snapshot=(("org", "per-edition 24h allocations (e.g. 100k+ by edition/licenses) (~)"),),
-        notes="The daily-allocation model: one big 24h pool sized by licenses."),
+        notes="The daily-allocation model: one big 24h pool sized by licenses.",
+        auth=(('oauth', 'SALESFORCE_CLIENT_ID'), ('oauth', 'SALESFORCE_CLIENT_SECRET')),),
     "mailchimp_api": Provider(
         key="mailchimp_api", name="Mailchimp API", kind="api",
         scope="per account",
@@ -1030,7 +1129,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="concurrent connection cap + per-minute throttle",
         snapshot=(("account", "10 simultaneous connections class (~)"),),
-        notes="Concurrency, not volume, is the documented choke point."),
+        notes="Concurrency, not volume, is the documented choke point.",
+        auth=(('api_key', 'MAILCHIMP_API_KEY'),),),
     "resend_api": Provider(
         key="resend_api", name="Resend API", kind="api",
         scope="per team / API key",
@@ -1039,7 +1139,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with ratelimit headers",
         reset_rule="per-second window",
         snapshot=(("default", "~100 requests/second class team-wide (~)"),),
-        notes="Small, honest, published single number."),
+        notes="Small, honest, published single number.",
+        auth=(('api_key', 'RESEND_API_KEY'),),),
     "postmark_api": Provider(
         key="postmark_api", name="Postmark API", kind="api",
         scope="per account / server",
@@ -1048,7 +1149,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows per endpoint class",
         snapshot=(("account", "per-endpoint RPM ceilings published (~)"),),
-        notes="Email API with per-endpoint published ceilings."),
+        notes="Email API with per-endpoint published ceilings.",
+        auth=(('token', 'POSTMARK_SERVER_TOKEN'),),),
     "vonage_api": Provider(
         key="vonage_api", name="Vonage APIs (Nexmo)", kind="api",
         scope="per account / application",
@@ -1057,7 +1159,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 throttled responses",
         reset_rule="per-second outbound rates per API",
         snapshot=(("account", "per-API req/s caps (SMS ~30/s class) (~)"),),
-        notes="Outbound messaging is metered per second per destination country rules too."),
+        notes="Outbound messaging is metered per second per destination country rules too.",
+        auth=(('api_key', 'VONAGE_API_KEY'), ('api_key', 'VONAGE_API_SECRET')),),
     "plivo_api": Provider(
         key="plivo_api", name="Plivo API", kind="api",
         scope="per account",
@@ -1066,7 +1169,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-second windows",
         snapshot=(("account", "per-account req/s ceilings (~)"),),
-        notes="Telecom API; messaging + voice each metered."),
+        notes="Telecom API; messaging + voice each metered.",
+        auth=(('basic', 'PLIVO_AUTH_ID'), ('basic', 'PLIVO_AUTH_TOKEN')),),
     "paypal_api": Provider(
         key="paypal_api", name="PayPal REST API", kind="api",
         scope="per client / account",
@@ -1075,7 +1179,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 RATE_LIMIT_REACHED",
         reset_rule="per-minute windows",
         snapshot=(("client", "per-endpoint RPM guidance published (~)"),),
-        notes="429 body carries name RATE_LIMIT_REACHED."),
+        notes="429 body carries name RATE_LIMIT_REACHED.",
+        auth=(('oauth', 'PAYPAL_CLIENT_ID'), ('oauth', 'PAYPAL_CLIENT_SECRET')),),
     "square_api": Provider(
         key="square_api", name="Square API", kind="api",
         scope="per location / application",
@@ -1084,7 +1189,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 RATE_LIMITED",
         reset_rule="per-endpoint undisclosed windows; error code is the contract",
         snapshot=(("app", "limits not fully published; RATE_LIMITED error + backoff guidance (~)"),),
-        notes="Documented as intentionally unpublished numbers: honour the error, back off."),
+        notes="Documented as intentionally unpublished numbers: honour the error, back off.",
+        auth=(('token', 'SQUARE_ACCESS_TOKEN'),),),
     "razorpay_api": Provider(
         key="razorpay_api", name="Razorpay API", kind="api",
         scope="per account (merchant)",
@@ -1093,7 +1199,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows",
         snapshot=(("merchant", "per-account RPM ceilings communicated per merchant (~)"),),
-        notes="Payments in India; limits scale with merchant volume tier."),
+        notes="Payments in India; limits scale with merchant volume tier.",
+        auth=(('basic', 'RAZORPAY_KEY_ID'), ('basic', 'RAZORPAY_KEY_SECRET')),),
     "kraken_api": Provider(
         key="kraken_api", name="Kraken API", kind="api",
         scope="per account",
@@ -1102,7 +1209,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / EAPI:Rate limit exceeded",
         reset_rule="counter decays over time; call cost weights differ",
         snapshot=(("starter", "tiered counters: Starter 15 / Intermediate 20 / Pro 20+ with decay (~)"),),
-        notes="Weighted call costs with a decaying counter — token bucket by another name."),
+        notes="Weighted call costs with a decaying counter — token bucket by another name.",
+        auth=(('api_key', 'KRAKEN_API_KEY'), ('api_key', 'KRAKEN_API_SECRET')),),
     "binance_api": Provider(
         key="binance_api", name="Binance API", kind="api",
         scope="per IP + per account (UID)",
@@ -1111,7 +1219,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 then 418 (IP ban) on repeat abuse",
         reset_rule="per-minute weight window; order windows per second/day",
         snapshot=(("spot", "6,000 request weight/minute; order limits per symbol/account (~)"),),
-        notes="The escalation case study: ignoring 429s earns a 418 IP ban."),
+        notes="The escalation case study: ignoring 429s earns a 418 IP ban.",
+        auth=(('api_key', 'BINANCE_API_KEY'), ('api_key', 'BINANCE_API_SECRET')),),
     "alpaca_api": Provider(
         key="alpaca_api", name="Alpaca API", kind="api",
         scope="per API key",
@@ -1120,7 +1229,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute window",
         snapshot=(("default", "200 requests/minute (non-commercial class)"),),
-        notes="One flat published number for trading + data (paid data raises it)."),
+        notes="One flat published number for trading + data (paid data raises it).",
+        auth=(('api_key', 'ALPACA_API_KEY'), ('api_key', 'ALPACA_SECRET_KEY')),),
     "polygon_api": Provider(
         key="polygon_api", name="Polygon.io API", kind="api",
         scope="per API key / plan",
@@ -1129,7 +1239,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute window",
         snapshot=(("free", "5 requests/minute free; paid tiers lift RPM (~)"),),
-        notes="Free tier is deliberately tiny: 5/min is the famous number."),
+        notes="Free tier is deliberately tiny: 5/min is the famous number.",
+        auth=(('api_key', 'POLYGON_API_KEY'),),),
     "alpha_vantage": Provider(
         key="alpha_vantage", name="Alpha Vantage API", kind="api",
         scope="per API key",
@@ -1138,7 +1249,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / throttle note in body",
         reset_rule="daily cap + per-minute burst",
         snapshot=(("free", "25 requests/day free (raised from 25; premium lifts both) (~)"),),
-        notes="Daily-quota-first design; body contains a plain-English throttle note."),
+        notes="Daily-quota-first design; body contains a plain-English throttle note.",
+        auth=(('api_key', 'ALPHA_VANTAGE_API_KEY'),),),
     "twelvedata_api": Provider(
         key="twelvedata_api", name="Twelve Data API", kind="api",
         scope="per API key",
@@ -1147,7 +1259,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute rate + daily credit ledger",
         snapshot=(("free", "8 RPM / 800 credits/day free class (~)"),),
-        notes="Credits-per-symbol-call make cost per request variable."),
+        notes="Credits-per-symbol-call make cost per request variable.",
+        auth=(('api_key', 'TWELVEDATA_API_KEY'),),),
     "finnhub_api": Provider(
         key="finnhub_api", name="Finnhub API", kind="api",
         scope="per API key",
@@ -1156,7 +1269,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 API limit reached",
         reset_rule="per-minute window",
         snapshot=(("free", "60 calls/minute free class (~)"),),
-        notes="Flat per-minute ceiling by plan."),
+        notes="Flat per-minute ceiling by plan.",
+        auth=(('api_key', 'FINNHUB_API_KEY'),),),
     "plaid_api": Provider(
         key="plaid_api", name="Plaid API", kind="api",
         scope="per client, per endpoint family",
@@ -1165,7 +1279,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 RATE_LIMIT_EXCEEDED",
         reset_rule="per-minute windows per endpoint family",
         snapshot=(("client", "per-endpoint-family RPM tables published (~)"),),
-        notes="Error codes distinguish rate limits per product endpoint."),
+        notes="Error codes distinguish rate limits per product endpoint.",
+        auth=(('basic', 'PLAID_CLIENT_ID'), ('basic', 'PLAID_SECRET')),),
     "quickbooks_api": Provider(
         key="quickbooks_api", name="QuickBooks Online API", kind="api",
         scope="per realm (company) + app",
@@ -1174,7 +1289,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-minute + concurrency windows",
         snapshot=(("realm", "500 requests/minute per realm; 10 concurrent per realm class (~)"),),
-        notes="Metered per company file (realm), not per user."),
+        notes="Metered per company file (realm), not per user.",
+        auth=(('oauth', 'QUICKBOOKS_CLIENT_ID'), ('oauth', 'QUICKBOOKS_CLIENT_SECRET')),),
     "xero_api": Provider(
         key="xero_api", name="Xero API", kind="api",
         scope="per tenant / app",
@@ -1183,7 +1299,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-MinLimit headers",
         reset_rule="per-minute, daily and concurrent triple limits",
         snapshot=(("tenant", "60 RPM / 5,000 per day / 5 concurrent per tenant (~)"),),
-        notes="Publishes minute, day AND concurrency in one table."),
+        notes="Publishes minute, day AND concurrency in one table.",
+        auth=(('oauth', 'XERO_CLIENT_ID'), ('oauth', 'XERO_CLIENT_SECRET')),),
     "etsy_api": Provider(
         key="etsy_api", name="Etsy Open API", kind="api",
         scope="per API key",
@@ -1192,7 +1309,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-second rate + daily quota",
         snapshot=(("keystring", "10 QPS / 10,000 QPD class per key (~)"),),
-        notes="QPS+QPD pair is published in the developer docs."),
+        notes="QPS+QPD pair is published in the developer docs.",
+        auth=(('api_key', 'ETSY_API_KEY'),),),
     "ebay_api": Provider(
         key="ebay_api", name="eBay APIs", kind="api",
         scope="per app + user, per API",
@@ -1201,7 +1319,8 @@ MORE_PROVIDERS_100 = {
         on_limit="error 429 / quota errors",
         reset_rule="daily call quotas per API, some hourly",
         snapshot=(("app", "per-API daily quotas published (e.g. Buy APIs 5,000/day class) (~)"),),
-        notes="Quota-per-API model: every eBay API has its own daily table row."),
+        notes="Quota-per-API model: every eBay API has its own daily table row.",
+        auth=(('oauth', 'EBAY_CLIENT_ID'), ('oauth', 'EBAY_CLIENT_SECRET')),),
     "amazon_sp_api": Provider(
         key="amazon_sp_api", name="Amazon Selling Partner API", kind="api",
         scope="per seller + operation",
@@ -1210,7 +1329,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with x-amzn-RateLimit-Limit header",
         reset_rule="per-operation token-bucket (rate + burst published per operation)",
         snapshot=(("operation", "usage plans publish rate/burst per operation (~)"),),
-        notes="The header literally returns your token-bucket rate for that operation."),
+        notes="The header literally returns your token-bucket rate for that operation.",
+        auth=(('keys', 'AWS_ACCESS_KEY_ID'), ('oauth', 'LWA_CLIENT_ID'), ('oauth', 'LWA_CLIENT_SECRET')),),
     "uber_api": Provider(
         key="uber_api", name="Uber API", kind="api",
         scope="per access token / app",
@@ -1219,7 +1339,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="hourly windows per endpoint",
         snapshot=(("app", "per-endpoint hourly ceilings published (~)"),),
-        notes="Rides + Eats developer surfaces metered per endpoint."),
+        notes="Rides + Eats developer surfaces metered per endpoint.",
+        auth=(('oauth', 'UBER_CLIENT_ID'), ('oauth', 'UBER_CLIENT_SECRET')),),
     "mapbox_api": Provider(
         key="mapbox_api", name="Mapbox APIs", kind="api",
         scope="per account / token",
@@ -1228,7 +1349,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows per API",
         snapshot=(("account", "per-API RPM tables (geocoding 600/min class) (~)"),),
-        notes="Each Mapbox API publishes its own per-minute row."),
+        notes="Each Mapbox API publishes its own per-minute row.",
+        auth=(('token', 'MAPBOX_ACCESS_TOKEN'),),),
     "tomtom_api": Provider(
         key="tomtom_api", name="TomTom APIs", kind="api",
         scope="per API key",
@@ -1237,7 +1359,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-second + daily caps by key tier",
         snapshot=(("key", "per-API QPS and daily transaction caps (~)"),),
-        notes="Transactions, not requests, are the billing/limit unit."),
+        notes="Transactions, not requests, are the billing/limit unit.",
+        auth=(('api_key', 'TOMTOM_API_KEY'),),),
     "here_api": Provider(
         key="here_api", name="HERE APIs", kind="api",
         scope="per app / project",
@@ -1246,7 +1369,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="per-second windows",
         snapshot=(("app", "per-service req/s ceilings (~)"),),
-        notes="Freemium plans cap monthly transactions too."),
+        notes="Freemium plans cap monthly transactions too.",
+        auth=(('api_key', 'HERE_API_KEY'),),),
     "foursquare_api": Provider(
         key="foursquare_api", name="Foursquare Places API", kind="api",
         scope="per project / API key",
@@ -1255,7 +1379,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="hourly windows",
         snapshot=(("project", "per-project hourly ceilings by tier (~)"),),
-        notes="Places data metered per project."),
+        notes="Places data metered per project.",
+        auth=(('api_key', 'FOURSQUARE_API_KEY'),),),
     "yelp_api": Provider(
         key="yelp_api", name="Yelp Fusion API", kind="api",
         scope="per API key",
@@ -1264,7 +1389,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 / quota errors",
         reset_rule="daily quota window",
         snapshot=(("business", "5,000 calls/day class (~)"),),
-        notes="Daily quota is the whole story for the standard key."),
+        notes="Daily quota is the whole story for the standard key.",
+        auth=(('api_key', 'YELP_API_KEY'),),),
     "nasa_api": Provider(
         key="nasa_api", name="NASA APIs (api.nasa.gov)", kind="api",
         scope="per API key / IP",
@@ -1273,7 +1399,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="hourly windows",
         snapshot=(("registered", "1,000 requests/hour registered; DEMO_KEY 30/hour per IP"),),
-        notes="The most-taught rate limit on the internet: DEMO_KEY vs registered key."),
+        notes="The most-taught rate limit on the internet: DEMO_KEY vs registered key.",
+        auth=(('api_key', 'NASA_API_KEY'),),),
     "news_api": Provider(
         key="news_api", name="NewsAPI", kind="api",
         scope="per API key",
@@ -1282,7 +1409,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 rateLimited error",
         reset_rule="daily window (developer plan)",
         snapshot=(("developer", "100 requests/day on the free developer plan"),),
-        notes="Error body code 'rateLimited' is the contract."),
+        notes="Error body code 'rateLimited' is the contract.",
+        auth=(('api_key', 'NEWS_API_KEY'),),),
     "guardian_api": Provider(
         key="guardian_api", name="The Guardian Open Platform", kind="api",
         scope="per API key",
@@ -1291,7 +1419,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-second + daily windows",
         snapshot=(("developer", "~12 req/s and ~5,000/day class for developer keys (~)"),),
-        notes="Content API with both burst and daily meters."),
+        notes="Content API with both burst and daily meters.",
+        auth=(('api_key', 'GUARDIAN_API_KEY'),),),
     "nyt_api": Provider(
         key="nyt_api", name="NYT APIs", kind="api",
         scope="per API key",
@@ -1300,7 +1429,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute + daily windows",
         snapshot=(("key", "10 requests/minute and 500/day per API (~)"),),
-        notes="Small published numbers; per-API keys metered separately."),
+        notes="Small published numbers; per-API keys metered separately.",
+        auth=(('api_key', 'NYT_API_KEY'),),),
     "stackexchange_api": Provider(
         key="stackexchange_api", name="Stack Exchange API", kind="api",
         scope="per IP / app key",
@@ -1309,7 +1439,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with backoff field in body",
         reset_rule="daily quota; body can carry an explicit backoff seconds field",
         snapshot=(("anonymous", "10,000/day with key (300/day IP-only class); backoff field must be honoured (~)"),),
-        notes="Unique: the JSON body itself can order a backoff — violating it voids quota."),
+        notes="Unique: the JSON body itself can order a backoff — violating it voids quota.",
+        auth=(('api_key', 'STACKEXCHANGE_API_KEY'),),),
     "wikimedia_api": Provider(
         key="wikimedia_api", name="Wikimedia / Wikipedia APIs", kind="api",
         scope="per client (User-Agent identified)",
@@ -1318,7 +1449,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After",
         reset_rule="politeness throttling; identified clients get higher ceilings",
         snapshot=(("identified", "published access policies; polite identified clients ~higher req/s (~)"),),
-        notes="Identity here is a User-Agent string, not a key — honesty is the credential."),
+        notes="Identity here is a User-Agent string, not a key — honesty is the credential.",
+        auth=(('none', 'no key required'),),),
     "openalex_api": Provider(
         key="openalex_api", name="OpenAlex API", kind="api",
         scope="per API key / polite pool",
@@ -1327,7 +1459,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="daily windows; mailto polite pool historically",
         snapshot=(("free", "usage-based pricing era: per-day request budgets by plan (~)"),),
-        notes="Scholarly graph; single-record calls are cheap, list calls cost more."),
+        notes="Scholarly graph; single-record calls are cheap, list calls cost more.",
+        auth=(('none', 'no key required'),),),
     "crossref_api": Provider(
         key="crossref_api", name="Crossref API", kind="api",
         scope="per client (polite pool)",
@@ -1336,7 +1469,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on throttle",
         reset_rule="politeness pools: public / polite / plus",
         snapshot=(("polite", "polite pool (with contact mailto) gets higher req/s than public (~)"),),
-        notes="Three pools by behaviour, not by payment."),
+        notes="Three pools by behaviour, not by payment.",
+        auth=(('none', 'no key required'),),),
     "noaa_api": Provider(
         key="noaa_api", name="NOAA / National Weather Service API", kind="api",
         scope="per client (User-Agent identified)",
@@ -1345,7 +1479,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-second guideline window",
         snapshot=(("guideline", "~5 requests/second guideline; unique User-Agent required (~)"),),
-        notes="US national weather: a national digital product with a published politeness limit."),
+        notes="US national weather: a national digital product with a published politeness limit.",
+        auth=(('none', 'no key required'),),),
     "monday_api": Provider(
         key="monday_api", name="monday.com API", kind="api",
         scope="per account / user token",
@@ -1354,7 +1489,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 complexity / rate errors",
         reset_rule="per-minute complexity budget + concurrency cap",
         snapshot=(("account", "complexity points per minute budget; 25 concurrent class (~)"),),
-        notes="Queries cost complexity points — GraphQL cost accounting like GitHub."),
+        notes="Queries cost complexity points — GraphQL cost accounting like GitHub.",
+        auth=(('token', 'MONDAY_API_TOKEN'),),),
     "asana_api": Provider(
         key="asana_api", name="Asana API", kind="api",
         scope="per bearer token",
@@ -1363,7 +1499,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After",
         reset_rule="per-minute windows; distributor endpoints differ",
         snapshot=(("token", "1,500 requests/minute per token class (~)"),),
-        notes="One generous flat number, published."),
+        notes="One generous flat number, published.",
+        auth=(('token', 'ASANA_ACCESS_TOKEN'),),),
     "clickup_api": Provider(
         key="clickup_api", name="ClickUp API", kind="api",
         scope="per personal token",
@@ -1372,7 +1509,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute windows by plan",
         snapshot=(("token", "100 RPM (free class) scaling by plan (~)"),),
-        notes="Plan-scaled per-token RPM."),
+        notes="Plan-scaled per-token RPM.",
+        auth=(('token', 'CLICKUP_API_TOKEN'),),),
     "todoist_api": Provider(
         key="todoist_api", name="Todoist API", kind="api",
         scope="per user token",
@@ -1381,7 +1519,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="15-minute windows (REST vs Sync differ)",
         snapshot=(("sync_api", "450 requests per 15 min (Sync) / 1,000 per 15 min (REST) class (~)"),),
-        notes="Unusual 15-minute window — window length is part of the fingerprint."),
+        notes="Unusual 15-minute window — window length is part of the fingerprint.",
+        auth=(('token', 'TODOIST_API_TOKEN'),),),
     "dropbox_api": Provider(
         key="dropbox_api", name="Dropbox API", kind="api",
         scope="per app / team",
@@ -1390,7 +1529,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After (error too_many_requests)",
         reset_rule="undisclosed windows; Retry-After authoritative",
         snapshot=(("app", "numbers unpublished; 429 body + Retry-After are the contract (~)"),),
-        notes="Deliberately unpublished: the mask must be header-driven here."),
+        notes="Deliberately unpublished: the mask must be header-driven here.",
+        auth=(('token', 'DROPBOX_ACCESS_TOKEN'),),),
     "box_api": Provider(
         key="box_api", name="Box API", kind="api",
         scope="per user / enterprise",
@@ -1399,7 +1539,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After",
         reset_rule="per-minute windows per API class",
         snapshot=(("user", "~1,000 RPM API class with per-endpoint variations (~)"),),
-        notes="Per-user metering across an enterprise content cloud."),
+        notes="Per-user metering across an enterprise content cloud.",
+        auth=(('token', 'BOX_DEVELOPER_TOKEN'),),),
     "google_drive_api": Provider(
         key="google_drive_api", name="Google Drive API", kind="api",
         scope="per project + per user",
@@ -1408,7 +1549,8 @@ MORE_PROVIDERS_100 = {
         on_limit="403/429 quota errors (rateLimitExceeded)",
         reset_rule="per-minute project + per-user pair",
         snapshot=(("project", "per-project and per-user per-minute quotas in Cloud Console (~)"),),
-        notes="Two-level quota: project ceiling AND per-user ceiling inside it."),
+        notes="Two-level quota: project ceiling AND per-user ceiling inside it.",
+        auth=(('api_key', 'GOOGLE_API_KEY'), ('oauth', 'Google OAuth token')),),
     "figma_api": Provider(
         key="figma_api", name="Figma REST API", kind="api",
         scope="per access token",
@@ -1417,7 +1559,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Retry-After + X-Figma-Rate-Limit-Type header",
         reset_rule="per-minute windows; tiered by plan + endpoint cost class",
         snapshot=(("starter", "published cost-class tiers (Tier 1 endpoints cheapest) by seat plan (~)"),),
-        notes="Newer published model: endpoints grouped into rate tiers by cost."),
+        notes="Newer published model: endpoints grouped into rate tiers by cost.",
+        auth=(('token', 'FIGMA_ACCESS_TOKEN'),),),
     "miro_api": Provider(
         key="miro_api", name="Miro API", kind="api",
         scope="per access token / team",
@@ -1426,7 +1569,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-minute windows",
         snapshot=(("token", "per-token RPM ceilings published (~)"),),
-        notes="Whiteboard platform, standard header dialect."),
+        notes="Whiteboard platform, standard header dialect.",
+        auth=(('token', 'MIRO_ACCESS_TOKEN'),),),
     "webflow_api": Provider(
         key="webflow_api", name="Webflow API", kind="api",
         scope="per site / workspace token",
@@ -1435,7 +1579,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-RateLimit headers",
         reset_rule="per-minute windows per token type",
         snapshot=(("site_token", "60 RPM (site) / 120 RPM (workspace) class (~)"),),
-        notes="Token type changes the ceiling."),
+        notes="Token type changes the ceiling.",
+        auth=(('token', 'WEBFLOW_API_TOKEN'),),),
     "contentful_api": Provider(
         key="contentful_api", name="Contentful APIs (CDA/CMA/CPA)", kind="api",
         scope="per space + environment",
@@ -1444,7 +1589,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with X-Contentful-RateLimit headers + reset seconds",
         reset_rule="per-second windows; header gives seconds-to-reset",
         snapshot=(("space", "delivery ~per-second ceilings by API type; headers name reset (~)"),),
-        notes="Headers carry RateLimit-Reset as relative seconds — a dialect variant."),
+        notes="Headers carry RateLimit-Reset as relative seconds — a dialect variant.",
+        auth=(('token', 'CONTENTFUL_ACCESS_TOKEN'),),),
     "sanity_api": Provider(
         key="sanity_api", name="Sanity API", kind="api",
         scope="per project",
@@ -1453,7 +1599,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="per-minute + concurrency windows",
         snapshot=(("project", "per-project API ceilings by plan (~)"),),
-        notes="Content lake APIs metered per project."),
+        notes="Content lake APIs metered per project.",
+        auth=(('token', 'SANITY_API_TOKEN'),),),
     "airtable_pat": Provider(
         key="airtable_pat", name="Airtable API (base-level)", kind="api",
         scope="per base",
@@ -1462,7 +1609,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with 30s block",
         reset_rule="per-second window per base; 429 blocks for 30 seconds",
         snapshot=(("base", "5 requests/second per base; exceed and the base blocks 30s"),),
-        notes="Per-base (not per-key) metering with a fixed penalty box."),
+        notes="Per-base (not per-key) metering with a fixed penalty box.",
+        auth=(('token', 'AIRTABLE_PAT'),),),
     "twitch_helix": Provider(
         key="twitch_helix", name="Twitch Helix API (cost system)", kind="api",
         scope="per user + app, points bucket",
@@ -1471,7 +1619,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 with Ratelimit headers",
         reset_rule="points bucket refills per minute; endpoints cost 1+ points",
         snapshot=(("app_user", "800 points/minute (app+user bucket) class (~)"),),
-        notes="Points bucket distinct from the earlier registry's channel-points entry: this is Helix API cost."),
+        notes="Points bucket distinct from the earlier registry's channel-points entry: this is Helix API cost.",
+        auth=(('oauth', 'TWITCH_CLIENT_ID'), ('token', 'TWITCH_ACCESS_TOKEN')),),
     "discord_bot_gateway": Provider(
         key="discord_bot_gateway", name="Discord Gateway / interactions", kind="api",
         scope="per bot session",
@@ -1480,7 +1629,8 @@ MORE_PROVIDERS_100 = {
         on_limit="gateway close codes / invalid session",
         reset_rule="per-session event windows + daily identify allowance",
         snapshot=(("bot", "120 gateway events per 60s per session; 1,000 identifies/day (scales with shards) (~)"),),
-        notes="Not HTTP at all: websocket event budget + daily session-start quota."),
+        notes="Not HTTP at all: websocket event budget + daily session-start quota.",
+        auth=(('token', 'DISCORD_BOT_TOKEN'),),),
     "kubernetes_api": Provider(
         key="kubernetes_api", name="Kubernetes API (client-side + APF)", kind="api",
         scope="per client / API server",
@@ -1489,7 +1639,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 from API Priority and Fairness",
         reset_rule="server-side flow control queues by priority level",
         snapshot=(("client", "client-go defaults QPS 5 / burst 10; APF queues server-side (~)"),),
-        notes="National/international infra runs on this: rate limiting as fairness queueing."),
+        notes="National/international infra runs on this: rate limiting as fairness queueing.",
+        auth=(('service_account', 'KUBECONFIG'), ('token', 'Kubernetes service-account token')),),
     "docker_hub_api": Provider(
         key="docker_hub_api", name="Docker Hub (registry pulls)", kind="api",
         scope="per IP / account",
@@ -1498,7 +1649,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on pull limit",
         reset_rule="rolling 6-hour pull windows",
         snapshot=(("anonymous", "100 pulls/6h anonymous IP; 200/6h free account; paid lifts cap (~)"),),
-        notes="The limit Darion hits publishing: container pulls are rate limited too."),
+        notes="The limit Darion hits publishing: container pulls are rate limited too.",
+        auth=(('basic', 'DOCKERHUB_USERNAME'), ('token', 'DOCKERHUB_TOKEN')),),
     "gitlab_runner_ci": Provider(
         key="gitlab_runner_ci", name="GitHub Actions / GitLab CI (runner minutes)", kind="api",
         scope="per account / plan",
@@ -1507,7 +1659,8 @@ MORE_PROVIDERS_100 = {
         on_limit="jobs queue / fail at quota",
         reset_rule="monthly minute ledger",
         snapshot=(("free_tier", "hosted runner minutes metered monthly by plan (~)"),),
-        notes="CI time is a rate limit denominated in minutes, not requests."),
+        notes="CI time is a rate limit denominated in minutes, not requests.",
+        auth=(('token', 'GITLAB_TOKEN'), ('token', 'GITHUB_TOKEN')),),
     "openstreetmap_api": Provider(
         key="openstreetmap_api", name="OpenStreetMap API / tile usage policy", kind="api",
         scope="per client (User-Agent identified)",
@@ -1516,7 +1669,8 @@ MORE_PROVIDERS_100 = {
         on_limit="403/429 on policy breach, tile blocks",
         reset_rule="usage-policy windows; heavy use must use tile providers",
         snapshot=(("policy", "max ~1 req/s for API; tile usage policy caps and blocks abusers (~)"),),
-        notes="A national/international commons: the limit is a published usage policy, enforced by blocks."),
+        notes="A national/international commons: the limit is a published usage policy, enforced by blocks.",
+        auth=(('oauth', 'OpenStreetMap OAuth token'),),),
     "brevo_api": Provider(
         key="brevo_api", name="Brevo (Sendinblue) API", kind="api",
         scope="per account / API key",
@@ -1525,7 +1679,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="hourly windows",
         snapshot=(("account", "per-key hourly ceilings published (~)"),),
-        notes="Email/SMS platform; transactional and marketing metered together."),
+        notes="Email/SMS platform; transactional and marketing metered together.",
+        auth=(('api_key', 'BREVO_API_KEY'),),),
     "coinapi": Provider(
         key="coinapi", name="CoinAPI", kind="api",
         scope="per API key",
@@ -1534,7 +1689,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on quota",
         reset_rule="daily quota window",
         snapshot=(("free", "100 requests/day free class (~)"),),
-        notes="Crypto market data priced in daily request quotas."),
+        notes="Crypto market data priced in daily request quotas.",
+        auth=(('api_key', 'COINAPI_API_KEY'),),),
     "weatherapi_com": Provider(
         key="weatherapi_com", name="WeatherAPI.com", kind="api",
         scope="per API key",
@@ -1543,7 +1699,8 @@ MORE_PROVIDERS_100 = {
         on_limit="403/429 on quota",
         reset_rule="monthly call ledger",
         snapshot=(("free", "1,000,000 calls/month free class (~)"),),
-        notes="Weather at scale: monthly ledger, burst rarely binding."),
+        notes="Weather at scale: monthly ledger, burst rarely binding.",
+        auth=(('api_key', 'WEATHERAPI_API_KEY'),),),
     "tomorrow_io": Provider(
         key="tomorrow_io", name="Tomorrow.io Weather API", kind="api",
         scope="per API key",
@@ -1552,7 +1709,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on limit",
         reset_rule="hourly + daily windows",
         snapshot=(("free", "500/hour and 1,000/day class free (~)"),),
-        notes="Hourly and daily pair, both published."),
+        notes="Hourly and daily pair, both published.",
+        auth=(('api_key', 'TOMORROW_IO_API_KEY'),),),
     "ipinfo_api": Provider(
         key="ipinfo_api", name="IPinfo API", kind="api",
         scope="per access token",
@@ -1561,7 +1719,8 @@ MORE_PROVIDERS_100 = {
         on_limit="429 on quota",
         reset_rule="monthly quota window",
         snapshot=(("free", "50,000 requests/month free class (~)"),),
-        notes="IP data metered as a monthly allowance."),
+        notes="IP data metered as a monthly allowance.",
+        auth=(('token', 'IPINFO_TOKEN'),),),
     "exchangerate_host": Provider(
         key="exchangerate_host", name="exchangerate.host API", kind="api",
         scope="per access key",
@@ -1570,7 +1729,8 @@ MORE_PROVIDERS_100 = {
         on_limit="quota errors on limit",
         reset_rule="monthly quota window",
         snapshot=(("free", "monthly request quotas by plan (~)"),),
-        notes="FX data: monthly quota is the meter."),
+        notes="FX data: monthly quota is the meter.",
+        auth=(('none', 'no key required'),),),
 }
 
 PROVIDERS.update(MORE_PROVIDERS_100)
@@ -3287,6 +3447,9 @@ def run_checks() -> tuple[int, int, list[str]]:
 
     check("registry holds all 157 systems", len(PROVIDERS) == 157)
     check("registry snapshot is dated", all(p.snapshot for p in PROVIDERS.values()))
+    check("every provider names its secrets/variables (names only)", all(p.auth for p in PROVIDERS.values()))
+    check("auth names carry no values", all("=" not in name and len(name) <= 64 for p in PROVIDERS.values() for _, name in p.auth))
+    check("auth kinds are from the allowed set", all(kind in {"api_key", "token", "oauth", "basic", "keys", "service_account", "account", "none"} for p in PROVIDERS.values() for kind, _ in p.auth))
 
     c = Clock()
     tb = TokenBucket(5, 1.0, c)
@@ -3519,6 +3682,20 @@ def main(argv: list[str]) -> int:
             print(json.dumps({"run": up.apply_wire(),
                               "effective_gemini": up.effective_snapshot("gemini_api"),
                               "rollback": up.rollback_last()}, indent=2, default=str))
+        return 0
+    if len(argv) > 1 and argv[1] == "auth":
+        if len(argv) > 2:
+            p = PROVIDERS.get(argv[2])
+            if p is None:
+                print(f"unknown provider: {argv[2]}")
+                return 1
+            print(json.dumps({"provider": p.key, "name": p.name,
+                              "auth": [{"kind": k, "name": n} for k, n in p.auth]}, indent=2))
+        else:
+            for k in sorted(PROVIDERS):
+                p = PROVIDERS[k]
+                print(f"{k:22} {p.name[:44]:44} " + ", ".join(n for _, n in p.auth))
+            print("names only: no secret value is stored anywhere in this registry.")
         return 0
     if len(argv) > 2 and argv[1] == "simulate":
         n = int(argv[2 + 1]) if len(argv) > 3 else 6

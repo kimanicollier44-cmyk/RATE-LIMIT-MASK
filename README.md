@@ -173,6 +173,10 @@ Every provider checks into **one** `UnifiedTracker`. Each recorded call carries 
 - **Analytics rankings:** most calls · most data · most tokens · slowest p95 · most limited · highest error rate
 - **One manageable table:** `python main.py tracker` prints all 157 APIs in a single table with a health column, and the same data exports as JSON (`analytics()`) or CSV (`to_csv()`)
 
+### Secrets & variables — names only, for all 157
+
+Every modelled provider now names the secrets and variables it needs — **by name only**: the API key, token, password, OAuth client, or account that gates its rate limit. `python main.py auth` prints the whole table (157 rows); `python main.py auth openai_api` prints one provider as JSON. Examples: GitHub → `GITHUB_TOKEN`, Gemini → `GEMINI_API_KEY`, Muse → `MODEL_API_KEY`, Docker Hub → `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN`, Claude Code → OAuth token, Wikimedia / OpenAlex / Crossref / NOAA → no key required. **No secret value is stored anywhere** — names only, values live in your password manager / repo secrets, and the self-checks enforce it (every provider has an `auth` entry; no `=` in any name; kinds from one fixed set). Names are a dated snapshot like the limits (checked 2026-11-13) — live docs win if a provider renames one, and auth-shape changes stay PROPOSED for the owner, never auto-applied.
+
 ### The brains — Argon 4 + Muse, managing together
 
 - 🧠 **Gemini Argon 4 Extended Thinking — DECIDER.** Carbon 4 seat, engine `gemini-2.5-pro`, model `google/gemini-carbon-4-extended-pro-thinking`. Every decision runs **MAP → MODEL → STRESS → DECIDE** with a hashed trace, at a thinking tier matched to the stakes (2048 routine / 8192 project / 32768 deploy). The tracker analytics are the MODEL stage's evidence.
