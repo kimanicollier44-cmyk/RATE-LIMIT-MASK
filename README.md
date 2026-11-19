@@ -1,4 +1,4 @@
-![RATE-LIMIT-MASK cover](cover.png)
+![RATE-LIMIT-MASK cover](RATE-LIMIT-MASK%20cover.png)
 
 # 👉🏿 RATE-LIMIT-MASK
 
